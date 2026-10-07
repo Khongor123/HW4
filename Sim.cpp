@@ -252,7 +252,7 @@ int main(int argc, char* argv[]) {
 		int progress = percentage(t.GetTimeCodeAsSeconds(), dur.GetTimeCodeAsSeconds());
 		std::cout << "\r" << progress << "%" << std::flush;
 
-		ALL();
+		// REMOVED 'ALL()'. Tests should be kept separate in the Tests program.
 
 		// --- New Cars Show Up (maybe) ---
 		int num_new_cars = poisson(new_car_rate);
