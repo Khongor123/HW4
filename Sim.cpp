@@ -42,7 +42,9 @@ struct results{ // All the "output" data from the simulation
 	int new_car_rate;
 	int num_crashes;
 	std::string total_cars;
-	std::unordered_map<int, std::vector<TimeCode>> count_times_map;
+	
+	// Count occurrences directly instead of storing every matching TimeCode
+	std::unordered_map<int, size_t> count_times_map;
 
 	std::vector<int> x_data;
 	std::vector<int> y_data;
@@ -89,12 +91,13 @@ void generateHTMLoutput(results data, const std::string& filename = "plot.html")
 	html_file << "<p>Number of Crashes: " << data.num_crashes << "</p>\n";
 	html_file << "<p>Total # of Cars Simulated: " << data.total_cars << "</p>\n";
 
-	html_file << "The number of moments (individual seconds) in which there were 0 cars: " << data.count_times_map[0].size() << "</p>\n";
-	html_file << "The number of moments (individual seconds) in which there was exactly 1 car: " << data.count_times_map[1].size() << "</p>\n";
-	html_file << "The number of moments (individual seconds) in which there were only 2 cars: " << data.count_times_map[2].size() << "</p>\n";
+	// The map stores counts directly, so no vector size lookup is needed.
+	html_file << "The number of moments (individual seconds) in which there were 0 cars: " << data.count_times_map[0] << "</p>\n";
+	html_file << "The number of moments (individual seconds) in which there was exactly 1 car: " << data.count_times_map[1] << "</p>\n";
+	html_file << "The number of moments (individual seconds) in which there were only 2 cars: " << data.count_times_map[2] << "</p>\n";
 	int sum = 0;
 	for(int i = 0; i <= 10; i++){
-		sum = sum + data.count_times_map[i].size();
+		sum = sum + data.count_times_map[i];
 	}
 	int per = percentage(sum, data.total_duration.GetTimeCodeAsSeconds());
 	html_file << "The number of moments (individual seconds) in which there were 10 cars or fewer: " << sum << " (about "  <<  per << "% of the entire simulation time.)" << "</p>\n";
@@ -175,13 +178,13 @@ void generateTerminalOutput(results data) {
 		<< "\n\tnumber of crashes: " << data.num_crashes
 		<< "\n\ttotal number of cars simulated: " << data.total_cars << std::endl;
 
-
-	std::cout << "\tThe number of moments (individual seconds) in which there were 0 cars: " << data.count_times_map[0].size() << std::endl;
-	std::cout << "\tThe number of moments (individual seconds) in which there was exactly 1 car: " << data.count_times_map[1].size() << std::endl;
-	std::cout << "\tThe number of moments (individual seconds) in which there were only 2 cars: " << data.count_times_map[2].size() << std::endl;
+	// The map now stores counts directly instead of vectors of times.
+	std::cout << "\tThe number of moments (individual seconds) in which there were 0 cars: " << data.count_times_map[0] << std::endl;
+	std::cout << "\tThe number of moments (individual seconds) in which there was exactly 1 car: " << data.count_times_map[1] << std::endl;
+	std::cout << "\tThe number of moments (individual seconds) in which there were only 2 cars: " << data.count_times_map[2] << std::endl;
 	int sum = 0;
 	for(int i = 0; i <= 10; i++){
-		sum = sum + data.count_times_map[i].size();
+		sum = sum + data.count_times_map[i];
 	}
 	int per = percentage(sum, data.total_duration.GetTimeCodeAsSeconds());;
 	std::cout << "\tThe number of moments (individual seconds) in which there were 10 cars or fewer: " << sum << " (about "  <<  per << "% of the entire simulation time.)" << std::endl;
@@ -248,9 +251,15 @@ int main(int argc, char* argv[]) {
 	int num_cars = 0; // number of cars (intially 0)
 	int crash_count = 0;
 	int crash_timer = 0; // cool-off period of a crash
+
+	// Avoid flushing repeated progress percentages in both loops.
+	int last_progress = -1;
 	for(TimeCode t = TimeCode(); t < dur; t = t + TimeCode(0, 0, 1)){
 		int progress = percentage(t.GetTimeCodeAsSeconds(), dur.GetTimeCodeAsSeconds());
-		std::cout << "\r" << progress << "%" << std::flush;
+		if(progress != last_progress){
+			std::cout << "\r" << progress << "%" << std::flush;
+			last_progress = progress;
+		}
 
 		// REMOVED 'ALL()'. Tests should be kept separate in the Tests program.
 
@@ -302,20 +311,17 @@ int main(int argc, char* argv[]) {
 	std::cout << std::endl;
 
 
-	// Find the times at which certain amount of cars are present
+	// Only the number of seconds at each car count is used, so avoid storing and copying their times.
 	std::cout << "Computing sample statistics..." << std::endl;
-	std::unordered_map<int, std::vector<TimeCode>> count_times;
+	std::unordered_map<int, size_t> count_times;
+	last_progress = -1;
 	for(size_t i = 0; i < data.size(); i++){
 		int progress = percentage(i, data.size());
-		std::cout << "\r" << progress << "%" << std::flush;
-		data_point_pair cur = data[i];
-		if(count_times.find(cur.num_cars) != count_times.end()){
-			std::vector<TimeCode> times_list = count_times[cur.num_cars];
-			times_list.push_back(cur.t);
-			count_times[cur.num_cars] = times_list;
-		} else {
-			count_times[cur.num_cars] = std::vector<TimeCode>{cur.t};
+		if(progress != last_progress){
+			std::cout << "\r" << progress << "%" << std::flush;
+			last_progress = progress;
 		}
+		count_times[data[i].num_cars]++;
 	}
 	std::cout << "\n---Simulation Finished---" << std::endl;
 
